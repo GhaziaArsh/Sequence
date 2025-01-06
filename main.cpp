@@ -1,238 +1,213 @@
 #include <iostream>
-#include <stack>
+#include <vector>
 #include <string>
 #include <cstdlib>
 #include <ctime>
+#include <algorithm>
+#include <map>
+#include <set>
 #include <iomanip>
 
 using namespace std;
 
-class Card {
-public:
-    string value;
-    string suit;
+// Constants
+const string ONE_EYE_JACK = "One-Eye Jack";
+const string TWO_EYE_JACK = "Two-Eye Jack";
 
-    Card(string val, string s) : value(val), suit(s) {}
-
-    string getCardRepresentation() {
-        return value + "(" + suit + ")";
-    }
-
-    string displayCard() {
-        return " " + value + "(" + suit + ") ";
-    }
+// Structures
+struct Space {
+    string card;
+    int marbles;
+    string team;
 };
 
-class Player {
-public:
+struct Player {
     string name;
-    Card* hand[7];
-    int handSize;
-
-    Player(string playerName) : name(playerName), handSize(0) {}
-
-    void drawCard(Card* card) {
-        if (handSize < 7) {
-            hand[handSize++] = card;
-        }
-    }
-
-    void playCard(int index) {
-        if (index >= 0 && index < handSize) {
-            for (int i = index; i < handSize - 1; i++) {
-                hand[i] = hand[i + 1];
-            }
-            handSize--;
-        } else {
-            cout << "Invalid card index.\n";
-        }
-    }
-
-    void showHand() {
-        cout << name << "'s hand: ";
-        for (int i = 0; i < handSize; i++) {
-            cout << hand[i]->displayCard() << (i == handSize - 1 ? "" : ", ");
-        }
-        cout << endl;
-    }
+    string team;
+    vector<string> cards;
 };
 
+// Global Variables
+vector<Player> players;
+vector<string> deck;
+map<string, Space> boardMap;
+set<string> completedSequences;
+
+// Board class
 class Board {
-public:
+private:
     string grid[10][10];
 
+public:
     Board() {
-        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
-        string suits[] = {"H", "S", "C", "D"};  // Hearts, Spades, Clubs, Diamonds
+        // Initialize board grid with card strings
+        string initialGrid[10][10] = {
+            {"A(H)", "2(S)", "10(D)", "8(C)", "K(D)", "3(S)", "Q(H)", "J(D)", "5(S)", "6(H)"},
+            {"4(D)", "7(H)", "10(C)", "A(S)", "J(H)", "6(S)", "3(C)", "K(S)", "2(H)", "8(D)"},
+            {"Q(S)", "A(D)", "7(C)", "3(H)", "9(S)", "K(H)", "10(S)", "8(S)", "5(C)", "J(S)"},
+            {"9(D)", "J(C)", "A(C)", "4(C)", "7(D)", "Q(D)", "5(D)", "6(C)", "2(C)", "10(H)"},
+            {"A(S)", "Q(H)", "8(H)", "7(S)", "6(D)", "4(H)", "2(D)", "J(H)", "9(C)", "10(D)"},
+            {"K(C)", "3(D)", "6(S)", "4(S)", "J(S)", "A(D)", "8(C)", "Q(C)", "5(S)", "9(H)"},
+            {"7(D)", "K(S)", "3(S)", "6(C)", "A(H)", "2(H)", "10(C)", "9(D)", "Q(S)", "4(C)"},
+            {"5(C)", "K(H)", "J(D)", "3(C)", "Q(C)", "9(S)", "2(S)", "10(D)", "7(H)", "A(D)"},
+            {"4(H)", "8(S)", "J(H)", "2(C)", "K(D)", "5(D)", "3(H)", "6(H)", "A(C)", "Q(H)"},
+            {"10(S)", "9(H)", "5(S)", "7(C)", "2(D)", "8(D)", "6(D)", "A(S)", "J(S)", "4(D)"}};
 
-        // Keeping the same number of cards and positions from the previous random distribution
-        grid[0][0] = "A(H)"; grid[0][1] = "2(S)"; grid[0][2] = "10(D)"; grid[0][3] = "8(C)";
-        grid[0][4] = "K(D)"; grid[0][5] = "3(S)"; grid[0][6] = "Q(H)"; grid[0][7] = "J(D)";
-        grid[0][8] = "5(S)"; grid[0][9] = "6(H)";
-        grid[1][0] = "4(D)"; grid[1][1] = "7(H)"; grid[1][2] = "10(C)"; grid[1][3] = "A(S)";
-        grid[1][4] = "J(H)"; grid[1][5] = "6(S)"; grid[1][6] = "3(C)"; grid[1][7] = "K(S)";
-        grid[1][8] = "2(H)"; grid[1][9] = "8(D)";
-        grid[2][0] = "Q(S)"; grid[2][1] = "A(D)"; grid[2][2] = "7(C)"; grid[2][3] = "3(H)";
-        grid[2][4] = "9(S)"; grid[2][5] = "K(H)"; grid[2][6] = "10(S)"; grid[2][7] = "8(S)";
-        grid[2][8] = "5(C)"; grid[2][9] = "J(S)";
-        grid[3][0] = "9(D)"; grid[3][1] = "J(C)"; grid[3][2] = "A(C)"; grid[3][3] = "4(C)";
-        grid[3][4] = "7(D)"; grid[3][5] = "Q(D)"; grid[3][6] = "5(D)"; grid[3][7] = "6(C)";
-        grid[3][8] = "2(C)"; grid[3][9] = "10(H)";
-        grid[4][0] = "A(S)"; grid[4][1] = "Q(H)"; grid[4][2] = "8(H)"; grid[4][3] = "7(S)";
-        grid[4][4] = "6(D)"; grid[4][5] = "4(H)"; grid[4][6] = "2(D)"; grid[4][7] = "J(H)";
-        grid[4][8] = "9(C)"; grid[4][9] = "10(D)";
-        grid[5][0] = "K(C)"; grid[5][1] = "3(D)"; grid[5][2] = "6(S)"; grid[5][3] = "4(S)";
-        grid[5][4] = "J(S)"; grid[5][5] = "A(D)"; grid[5][6] = "8(C)"; grid[5][7] = "Q(C)";
-        grid[5][8] = "5(S)"; grid[5][9] = "9(H)";
-        grid[6][0] = "7(D)"; grid[6][1] = "K(S)"; grid[6][2] = "3(S)"; grid[6][3] = "6(C)";
-        grid[6][4] = "A(H)"; grid[6][5] = "2(H)"; grid[6][6] = "10(C)"; grid[6][7] = "9(D)";
-        grid[6][8] = "Q(S)"; grid[6][9] = "4(C)";
-        grid[7][0] = "5(C)"; grid[7][1] = "K(H)"; grid[7][2] = "J(D)"; grid[7][3] = "3(C)";
-        grid[7][4] = "Q(C)"; grid[7][5] = "9(S)"; grid[7][6] = "2(S)"; grid[7][7] = "10(D)";
-        grid[7][8] = "7(H)"; grid[7][9] = "A(D)";
-        grid[8][0] = "4(H)"; grid[8][1] = "8(S)"; grid[8][2] = "J(H)"; grid[8][3] = "2(C)";
-        grid[8][4] = "K(D)"; grid[8][5] = "5(D)"; grid[8][6] = "3(H)"; grid[8][7] = "6(H)";
-        grid[8][8] = "A(C)"; grid[8][9] = "Q(H)";
-        grid[9][0] = "10(S)"; grid[9][1] = "9(H)"; grid[9][2] = "5(S)"; grid[9][3] = "7(C)";
-        grid[9][4] = "2(D)"; grid[9][5] = "8(D)"; grid[9][6] = "6(D)"; grid[9][7] = "A(S)";
-        grid[9][8] = "J(S)"; grid[9][9] = "4(D)";
-    }
-
-    void displayBoard() {
-        cout << "\nGame Board (10x10 grid with cards):\n";
-
-
-        cout << "  +----------------------------------------------------------------------------------------------------------------------------------------------+\n";
-
-        for (int i = 0; i < 10; i++) {
-            cout << "  |";
-            for (int j = 0; j < 10; j++) {
-                cout << setw(12) << grid[i][j] << " |";
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                grid[i][j] = initialGrid[i][j];
+                boardMap[grid[i][j]] = {"", 0, ""}; // Initialize boardMap with empty values
             }
-            cout << "\n  +------------------------------------------------------------------------------------------------------------------------------------------+\n";
         }
     }
 
-    bool placeCard(int row, int col, Card* card) {
-
-        string cardRepresentation = card->getCardRepresentation();
-        if (grid[row][col] == cardRepresentation) {
-            grid[row][col] = "-";
-            return true;
+    void displayBoard() const {
+        cout << "\nGame Board:\n";
+        cout << "  " << string(82, '-') << endl;
+        for (int i = 0; i < 10; ++i) {
+            cout << "|";
+            for (int j = 0; j < 10; ++j) {
+                cout << setw(7) << grid[i][j] << " |";
+            }
+            cout << "\n  " << string(82, '-') << endl;
         }
-        return false;
+    }
+
+    void updateBoard(const string &card, const string &team) {
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                if (grid[i][j] == card) {
+                    grid[i][j] += " (" + team + ")";
+                    return;
+                }
+            }
+        }
     }
 };
 
-class Game {
-private:
-    Player* players[12];
-    int playerCount;
-    Board board;
-    stack<Card*> deck;
-    int currentPlayerIndex;
+// Global Board
+Board gameBoard;
 
-public:
-    Game(int numPlayers) : playerCount(numPlayers), currentPlayerIndex(0) {
-        initializeDeck();
-    }
+// Function Prototypes
+void generateDeck();
+void dealCards(int cardsPerPlayer);
+void takeTurn(Player &player);
+bool checkForSequence(const string &team);
 
-    void addPlayer(string name) {
-        static int playerIndex = 0;
-        players[playerIndex++] = new Player(name);
-    }
+// Function Implementations
+void generateDeck() {
+    string suits[] = {"Hearts", "Diamonds", "Clubs", "Spades"};
+    string ranks[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"};
 
-    void startGame() {
-        shuffleDeck();
-        dealCards();
-        play();
-    }
-
-private:
-    void initializeDeck() {
-        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
-        string suits[] = {"H", "S", "C", "D"};
-
-        for (const string &suit : suits) {
-            for (const string &value : cardValues) {
-                deck.push(new Card(value, suit));
-            }
-        }
-
-        deck.push(new Card("Joker", "X"));
-    }
-
-    void shuffleDeck() {
-
-        Card* tempDeck[52];
-        int index = 0;
-
-        while (!deck.empty()) {
-            tempDeck[index++] = deck.top();
-            deck.pop();
-        }
-
-        for (int i = 0; i < 52; i++) {
-            int randIndex = rand() % 52;
-            swap(tempDeck[i], tempDeck[randIndex]);
-        }
-
-        for (int i = 0; i < 52; i++) {
-            deck.push(tempDeck[i]);
-        }
-    }
-
-    void dealCards() {
-        for (int i = 0; i < playerCount; i++) {
-            for (int j = 0; j < 7; j++) {
-                players[i]->drawCard(deck.top());
-                deck.pop();
-            }
-        }
-    }
-
-    void play() {
-        while (true) {
-
-            board.displayBoard();
-            players[currentPlayerIndex]->showHand();
-
-            cout << players[currentPlayerIndex]->name << ", it's your turn.\n";
-            int cardIndex;
-            cout << "Enter the index of the card you want to play (0-6): ";
-            cin >> cardIndex;
-
-
-            int row, col;
-            cout << "Enter the row and column (0-9) to place the card: ";
-            cin >> row >> col;
-
-            if (board.placeCard(row, col, players[currentPlayerIndex]->hand[cardIndex])) {
-                players[currentPlayerIndex]->playCard(cardIndex);
-                cout << players[currentPlayerIndex]->name << " played a card.\n";
+    for (const string &suit : suits) {
+        for (const string &rank : ranks) {
+            if (rank == "Jack") {
+                deck.push_back(ONE_EYE_JACK);
+                deck.push_back(TWO_EYE_JACK);
             } else {
-                cout << "Invalid move.\n";
+                deck.push_back(rank + " of " + suit);
             }
+        }
+    }
 
+    random_shuffle(deck.begin(), deck.end());
+}
 
-            currentPlayerIndex = (currentPlayerIndex + 1) % playerCount;
+void dealCards(int cardsPerPlayer) {
+    for (Player &player : players) {
+        for (int i = 0; i < cardsPerPlayer; ++i) {
+            player.cards.push_back(deck.back());
+            deck.pop_back();
+        }
+    }
+}
 
+void takeTurn(Player &player) {
+    cout << "\n" << player.name << "'s turn (Team " << player.team << "). Your cards:\n";
+    for (size_t i = 0; i < player.cards.size(); ++i) {
+        cout << i + 1 << ". " << player.cards[i] << endl;
+    }
 
-            if (deck.empty() && players[currentPlayerIndex]->handSize == 0) {
-                cout << "Game over.\n";
+    int choice;
+    cout << "Choose a card to play (1-" << player.cards.size() << "): ";
+    cin >> choice;
+
+    while (choice < 1 || choice > player.cards.size()) {
+        cout << "Invalid choice. Try again: ";
+        cin >> choice;
+    }
+
+    string chosenCard = player.cards[choice - 1];
+    player.cards.erase(player.cards.begin() + choice - 1);
+
+    if (chosenCard == ONE_EYE_JACK) {
+        cout << "Play a One-Eye Jack: Remove an opponent's marble.\n";
+    } else if (chosenCard == TWO_EYE_JACK) {
+        cout << "Play a Two-Eye Jack: Place your marble anywhere.\n";
+    } else {
+        cout << "You played " << chosenCard << ". Placing your marble.\n";
+        boardMap[chosenCard].marbles++;
+        boardMap[chosenCard].team = player.team;
+        gameBoard.updateBoard(chosenCard, player.team);
+    }
+
+    gameBoard.displayBoard();
+
+    if (checkForSequence(player.team)) {
+        cout << "\n" << player.team << " has completed a sequence!\n";
+        completedSequences.insert(player.team);
+    }
+}
+
+bool checkForSequence(const string &team) {
+    // Implement sequence checking logic (e.g., 5 consecutive marbles for a team)
+    return false;
+}
+
+// Main Function
+int main() {
+    srand(static_cast<unsigned>(time(0)));
+
+    cout << "Welcome to the Sequence Game!" << endl;
+    int numPlayers;
+    cout << "Enter the number of players (2-12): ";
+    cin >> numPlayers;
+
+    while (numPlayers < 2 || numPlayers > 12) {
+        cout << "Invalid number of players. Enter a number between 2 and 12: ";
+        cin >> numPlayers;
+    }
+
+    int cardsPerPlayer = (numPlayers <= 2) ? 7 : (numPlayers <= 4) ? 6 : (numPlayers <= 6) ? 5 : (numPlayers <= 9) ? 4 : 3;
+
+    for (int i = 0; i < numPlayers; ++i) {
+        Player player;
+        cout << "Enter Player " << i + 1 << "'s name: ";
+        cin >> player.name;
+        player.team = (i % 2 == 0) ? "Team 1" : "Team 2";
+        players.push_back(player);
+    }
+
+    generateDeck();
+    dealCards(cardsPerPlayer);
+    gameBoard.displayBoard();
+
+    bool gameWon = false;
+    while (!gameWon) {
+        for (Player &player : players) {
+            takeTurn(player);
+
+            if (completedSequences.size() >= 2) {
+                cout << "Game Over! Teams with completed sequences: ";
+                for (const auto &team : completedSequences) {
+                    cout << team << " ";
+                }
+                cout << endl;
+                gameWon = true;
                 break;
             }
         }
     }
-};
-
-int main() {
-    srand(time(0));
-
-    Game game(2);
-    game.addPlayer("Player 1");
-    game.addPlayer("Player 2");
-    game.startGame();
 
     return 0;
 }
