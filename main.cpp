@@ -1,213 +1,309 @@
 #include <iostream>
-#include <vector>
+#include <stack>
 #include <string>
 #include <cstdlib>
 #include <ctime>
-#include <algorithm>
-#include <map>
-#include <set>
 #include <iomanip>
+#include <vector>
+#include <algorithm>  // For random_shuffle
 
 using namespace std;
 
-// Constants
-const string ONE_EYE_JACK = "One-Eye Jack";
-const string TWO_EYE_JACK = "Two-Eye Jack";
+class Card {
+public:
+    string value;
+    string suit;
 
-// Structures
-struct Space {
-    string card;
-    int marbles;
-    string team;
+    Card(string val, string s) : value(val), suit(s) {}
+
+    string getCardRepresentation() {
+        return value + "(" + suit + ")";
+    }
+
+    string displayCard() {
+        return " " + value + "(" + suit + ") ";
+    }
 };
 
-struct Player {
+class Player {
+public:
     string name;
-    string team;
-    vector<string> cards;
+    Card* hand[7];
+    int handSize;
+
+    Player(string playerName) : name(playerName), handSize(0) {}
+
+    void drawCard(Card* card) {
+        if (handSize < 7) {
+            hand[handSize++] = card;
+        }
+    }
+
+    void playCard(int index) {
+        if (index >= 0 && index < handSize) {
+            for (int i = index; i < handSize - 1; i++) {
+                hand[i] = hand[i + 1];
+            }
+            handSize--;
+        } else {
+            cout << "Invalid card index.\n";
+        }
+    }
+
+    void showHand() {
+        cout << name << "'s hand: ";
+        for (int i = 0; i < handSize; i++) {
+            cout << hand[i]->displayCard() << (i == handSize - 1 ? "" : ", ");
+        }
+        cout << endl;
+    }
 };
 
-// Global Variables
-vector<Player> players;
-vector<string> deck;
-map<string, Space> boardMap;
-set<string> completedSequences;
-
-// Board class
 class Board {
-private:
+public:
     string grid[10][10];
+    Card* wildSpace;
+
+    Board() {
+        // Initialize the wild space at lower-left corner
+        wildSpace = new Card("Wild", "X");
+        grid[9][0] = wildSpace->getCardRepresentation();  // Wild space at lower-left corner
+
+        // Fill the board with shuffled cards from the deck
+        fillBoardWithCards();
+    }
+
+    void fillBoardWithCards() {
+        vector<Card*> deck;
+        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
+        string suits[] = {"H", "S", "C", "D"};
+        
+        // Fill the deck with cards
+        for (const string& suit : suits) {
+            for (const string& value : cardValues) {
+                deck.push_back(new Card(value, suit));
+            }
+        }
+
+        // Shuffle the deck
+        random_shuffle(deck.begin(), deck.end());
+
+        // Check if the deck is large enough (it should have 100 cards for a 10x10 grid)
+        while (deck.size() < 100) {
+            // Adding extra cards if deck size is less than 100
+            for (const string& suit : suits) {
+                for (const string& value : cardValues) {
+                    deck.push_back(new Card(value, suit));
+                }
+            }
+        }
+
+        // Place cards on the board, ensuring no "Empty" cards are placed
+        int index = 0;
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                if (index < deck.size()) {
+                    grid[i][j] = deck[index]->getCardRepresentation();
+                    index++;
+                }
+            }
+        }
+    }
+
+    void displayBoard() {
+        cout << "\nGame Board (10x10 grid with cards):\n";
+        cout << "  +----------------------------------------------------------------------------------------------------------------------------------------------+\n";
+
+        for (int i = 0; i < 10; i++) {
+            cout << "  |";
+            for (int j = 0; j < 10; j++) {
+                cout << setw(12) << grid[i][j] << " |";
+            }
+            cout << "\n  +------------------------------------------------------------------------------------------------------------------------------------------+\n";
+        }
+    }
+
+    bool placeCard(int row, int col, Card* card, string playerName) {
+        if (row >= 0 && row < 10 && col >= 0 && col < 10) {
+            // Check if the spot is either "Empty", "Wild" or if it matches the player's card
+            if (grid[row][col] == "Empty" || grid[row][col] == wildSpace->getCardRepresentation() || 
+                grid[row][col].find(card->value) != string::npos) {
+                grid[row][col] = playerName + "'s " + card->getCardRepresentation();  // Display player's name with the card
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool checkSequence() {
+        // Check for 5 consecutive cards horizontally, vertically, or diagonally
+        return false;
+    }
+};
+
+class Game {
+private:
+    vector<Player*> players;
+    int playerCount;
+    int teamCount;
+    vector<vector<Player*>> teams;
+    Board board;
+    stack<Card*> deck;
+    int currentPlayerIndex;
 
 public:
-    Board() {
-        // Initialize board grid with card strings
-        string initialGrid[10][10] = {
-            {"A(H)", "2(S)", "10(D)", "8(C)", "K(D)", "3(S)", "Q(H)", "J(D)", "5(S)", "6(H)"},
-            {"4(D)", "7(H)", "10(C)", "A(S)", "J(H)", "6(S)", "3(C)", "K(S)", "2(H)", "8(D)"},
-            {"Q(S)", "A(D)", "7(C)", "3(H)", "9(S)", "K(H)", "10(S)", "8(S)", "5(C)", "J(S)"},
-            {"9(D)", "J(C)", "A(C)", "4(C)", "7(D)", "Q(D)", "5(D)", "6(C)", "2(C)", "10(H)"},
-            {"A(S)", "Q(H)", "8(H)", "7(S)", "6(D)", "4(H)", "2(D)", "J(H)", "9(C)", "10(D)"},
-            {"K(C)", "3(D)", "6(S)", "4(S)", "J(S)", "A(D)", "8(C)", "Q(C)", "5(S)", "9(H)"},
-            {"7(D)", "K(S)", "3(S)", "6(C)", "A(H)", "2(H)", "10(C)", "9(D)", "Q(S)", "4(C)"},
-            {"5(C)", "K(H)", "J(D)", "3(C)", "Q(C)", "9(S)", "2(S)", "10(D)", "7(H)", "A(D)"},
-            {"4(H)", "8(S)", "J(H)", "2(C)", "K(D)", "5(D)", "3(H)", "6(H)", "A(C)", "Q(H)"},
-            {"10(S)", "9(H)", "5(S)", "7(C)", "2(D)", "8(D)", "6(D)", "A(S)", "J(S)", "4(D)"}};
+    Game() : currentPlayerIndex(0) {
+        initializeDeck();
+        teamCount = 0;
+        playerCount = 0;
+    }
 
-        for (int i = 0; i < 10; ++i) {
-            for (int j = 0; j < 10; ++j) {
-                grid[i][j] = initialGrid[i][j];
-                boardMap[grid[i][j]] = {"", 0, ""}; // Initialize boardMap with empty values
+    void askPlayersAndTeams() {
+        // Ask for number of teams (2 or 3)
+        do {
+            cout << "Enter the number of teams (2 or 3): ";
+            cin >> teamCount;
+        } while (teamCount != 2 && teamCount != 3);
+
+        // Ask for number of players (between 2 and 12)
+        do {
+            cout << "Enter the number of players (between 2 and 12): ";
+            cin >> playerCount;
+        } while (playerCount < 2 || playerCount > 12);
+
+        // Create teams and players
+        teams.resize(teamCount);
+        string playerName;
+        for (int i = 0; i < playerCount; i++) {
+            cout << "Enter name for Player " << i + 1 << ": ";
+            cin >> playerName;
+            Player* newPlayer = new Player(playerName);
+            players.push_back(newPlayer);
+            teams[i % teamCount].push_back(newPlayer);  // Assign players to teams
+        }
+    }
+
+    void startGame() {
+        shuffleDeck();
+        dealCards();
+        play();
+    }
+
+private:
+    void initializeDeck() {
+        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
+        string suits[] = {"H", "S", "C", "D"};
+
+        for (const string &suit : suits) {
+            for (const string &value : cardValues) {
+                deck.push(new Card(value, suit));
+            }
+        }
+
+        deck.push(new Card("Joker", "X"));  // Add Jokers
+    }
+
+    void shuffleDeck() {
+        Card* tempDeck[52];
+        int index = 0;
+
+        while (!deck.empty()) {
+            tempDeck[index++] = deck.top();
+            deck.pop();
+        }
+
+        // Shuffle the cards
+        for (int i = 0; i < 52; i++) {
+            int randIndex = rand() % 52;
+            swap(tempDeck[i], tempDeck[randIndex]);
+        }
+
+        // Refill the deck
+        for (int i = 0; i < 52; i++) {
+            deck.push(tempDeck[i]);
+        }
+    }
+
+    void dealCards() {
+        for (int i = 0; i < playerCount; i++) {
+            for (int j = 0; j < 7; j++) {
+                players[i]->drawCard(deck.top());
+                deck.pop();
             }
         }
     }
 
-    void displayBoard() const {
-        cout << "\nGame Board:\n";
-        cout << "  " << string(82, '-') << endl;
-        for (int i = 0; i < 10; ++i) {
-            cout << "|";
-            for (int j = 0; j < 10; ++j) {
-                cout << setw(7) << grid[i][j] << " |";
-            }
-            cout << "\n  " << string(82, '-') << endl;
-        }
-    }
+    void play() {
+        while (true) {
+            board.displayBoard();
+            players[currentPlayerIndex]->showHand();
 
-    void updateBoard(const string &card, const string &team) {
-        for (int i = 0; i < 10; ++i) {
-            for (int j = 0; j < 10; ++j) {
-                if (grid[i][j] == card) {
-                    grid[i][j] += " (" + team + ")";
-                    return;
+            cout << players[currentPlayerIndex]->name << ", it's your turn.\n";
+            int cardIndex;
+            cout << "Enter the index of the card you want to play (0-6): ";
+            cin >> cardIndex;
+
+            // Validate the card index
+            if (cardIndex < 0 || cardIndex >= players[currentPlayerIndex]->handSize) {
+                cout << "Invalid card index. Try again.\n";
+                continue;
+            }
+
+            // Handle Jack card special conditions
+            Card* currentCard = players[currentPlayerIndex]->hand[cardIndex];
+            int row, col;
+            cout << "Enter the row and column (0-9) to place the card: ";
+            cin >> row >> col;
+
+            // Loop until the player makes a valid move
+            while (true) {
+                if (currentCard->value == "J") {
+                    if (currentCard->suit == "X") {  // Two-eyed Jack
+                        cout << "You have a Two-eyed Jack! Enter the row and column to place the card: ";
+                        if (board.placeCard(row, col, currentCard, players[currentPlayerIndex]->name)) {
+                            players[currentPlayerIndex]->playCard(cardIndex);
+                            break;
+                        } else {
+                            cout << "Invalid move. Try again.\n";
+                            cout << "Enter the row and column (0-9) to place the card: ";
+                            cin >> row >> col;
+                        }
+                    } else {  // One-eyed Jack
+                        cout << "You have a One-eyed Jack! Pick a card from the opponent team.\n";
+                        // Implement picking card from the opponent team (if necessary)
+                        break;
+                    }
+                } else {
+                    if (board.placeCard(row, col, currentCard, players[currentPlayerIndex]->name)) {
+                        players[currentPlayerIndex]->playCard(cardIndex);
+                        cout << players[currentPlayerIndex]->name << " played a card.\n";
+                        break;
+                    } else {
+                        cout << "Invalid move. Try again.\n";
+                        cout << "Enter the row and column (0-9) to place the card: ";
+                        cin >> row >> col;
+                    }
                 }
             }
+
+            // Check if any team has won
+            if (board.checkSequence()) {
+                cout << "Game Over! We have a winner!\n";
+                break;
+            }
+
+            // Switch to the next player
+            currentPlayerIndex = (currentPlayerIndex + 1) % playerCount;
         }
     }
 };
 
-// Global Board
-Board gameBoard;
-
-// Function Prototypes
-void generateDeck();
-void dealCards(int cardsPerPlayer);
-void takeTurn(Player &player);
-bool checkForSequence(const string &team);
-
-// Function Implementations
-void generateDeck() {
-    string suits[] = {"Hearts", "Diamonds", "Clubs", "Spades"};
-    string ranks[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King", "Ace"};
-
-    for (const string &suit : suits) {
-        for (const string &rank : ranks) {
-            if (rank == "Jack") {
-                deck.push_back(ONE_EYE_JACK);
-                deck.push_back(TWO_EYE_JACK);
-            } else {
-                deck.push_back(rank + " of " + suit);
-            }
-        }
-    }
-
-    random_shuffle(deck.begin(), deck.end());
-}
-
-void dealCards(int cardsPerPlayer) {
-    for (Player &player : players) {
-        for (int i = 0; i < cardsPerPlayer; ++i) {
-            player.cards.push_back(deck.back());
-            deck.pop_back();
-        }
-    }
-}
-
-void takeTurn(Player &player) {
-    cout << "\n" << player.name << "'s turn (Team " << player.team << "). Your cards:\n";
-    for (size_t i = 0; i < player.cards.size(); ++i) {
-        cout << i + 1 << ". " << player.cards[i] << endl;
-    }
-
-    int choice;
-    cout << "Choose a card to play (1-" << player.cards.size() << "): ";
-    cin >> choice;
-
-    while (choice < 1 || choice > player.cards.size()) {
-        cout << "Invalid choice. Try again: ";
-        cin >> choice;
-    }
-
-    string chosenCard = player.cards[choice - 1];
-    player.cards.erase(player.cards.begin() + choice - 1);
-
-    if (chosenCard == ONE_EYE_JACK) {
-        cout << "Play a One-Eye Jack: Remove an opponent's marble.\n";
-    } else if (chosenCard == TWO_EYE_JACK) {
-        cout << "Play a Two-Eye Jack: Place your marble anywhere.\n";
-    } else {
-        cout << "You played " << chosenCard << ". Placing your marble.\n";
-        boardMap[chosenCard].marbles++;
-        boardMap[chosenCard].team = player.team;
-        gameBoard.updateBoard(chosenCard, player.team);
-    }
-
-    gameBoard.displayBoard();
-
-    if (checkForSequence(player.team)) {
-        cout << "\n" << player.team << " has completed a sequence!\n";
-        completedSequences.insert(player.team);
-    }
-}
-
-bool checkForSequence(const string &team) {
-    // Implement sequence checking logic (e.g., 5 consecutive marbles for a team)
-    return false;
-}
-
-// Main Function
 int main() {
-    srand(static_cast<unsigned>(time(0)));
+    srand(time(0));
 
-    cout << "Welcome to the Sequence Game!" << endl;
-    int numPlayers;
-    cout << "Enter the number of players (2-12): ";
-    cin >> numPlayers;
-
-    while (numPlayers < 2 || numPlayers > 12) {
-        cout << "Invalid number of players. Enter a number between 2 and 12: ";
-        cin >> numPlayers;
-    }
-
-    int cardsPerPlayer = (numPlayers <= 2) ? 7 : (numPlayers <= 4) ? 6 : (numPlayers <= 6) ? 5 : (numPlayers <= 9) ? 4 : 3;
-
-    for (int i = 0; i < numPlayers; ++i) {
-        Player player;
-        cout << "Enter Player " << i + 1 << "'s name: ";
-        cin >> player.name;
-        player.team = (i % 2 == 0) ? "Team 1" : "Team 2";
-        players.push_back(player);
-    }
-
-    generateDeck();
-    dealCards(cardsPerPlayer);
-    gameBoard.displayBoard();
-
-    bool gameWon = false;
-    while (!gameWon) {
-        for (Player &player : players) {
-            takeTurn(player);
-
-            if (completedSequences.size() >= 2) {
-                cout << "Game Over! Teams with completed sequences: ";
-                for (const auto &team : completedSequences) {
-                    cout << team << " ";
-                }
-                cout << endl;
-                gameWon = true;
-                break;
-            }
-        }
-    }
+    Game game;
+    game.askPlayersAndTeams();
+    game.startGame();
 
     return 0;
 }
