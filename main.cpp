@@ -1,309 +1,208 @@
 #include <iostream>
-#include <stack>
-#include <string>
-#include <cstdlib>
-#include <ctime>
-#include <iomanip>
 #include <vector>
-#include <algorithm>  // For random_shuffle
+#include <string>
+#include <algorithm>
+#include <random>
+#include <ctime>
 
 using namespace std;
 
-class Card {
-public:
-    string value;
-    string suit;
+class SequenceGame {
+private:
+    vector<vector<string>> board;         // 10x10 grid for the game board
+    vector<string> deck;                  // Deck with 52 randomly selected cards
+    vector<vector<string>> playerHands;   // Hands for each player
+    int playerTurn;                        // The current player's turn
+    int numPlayers;                       // Number of players
+    vector<string> players;               // List of player names
+    vector<string> teams;                 // List of team names
+    vector<int> teamSequences;            // Sequence count for each team
+    vector<string> stack;                 // Stack for remaining cards
 
-    Card(string val, string s) : value(val), suit(s) {}
+    // Initialize a 10x10 grid with 100 unique cards
+    void initializeBoard() {
+        board.resize(10, vector<string>(10, " "));
+        string suits[4] = {"H", "D", "C", "S"};
+        string ranks[13] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
 
-    string getCardRepresentation() {
-        return value + "(" + suit + ")";
-    }
-
-    string displayCard() {
-        return " " + value + "(" + suit + ") ";
-    }
-};
-
-class Player {
-public:
-    string name;
-    Card* hand[7];
-    int handSize;
-
-    Player(string playerName) : name(playerName), handSize(0) {}
-
-    void drawCard(Card* card) {
-        if (handSize < 7) {
-            hand[handSize++] = card;
-        }
-    }
-
-    void playCard(int index) {
-        if (index >= 0 && index < handSize) {
-            for (int i = index; i < handSize - 1; i++) {
-                hand[i] = hand[i + 1];
+        int cardIndex = 0;
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                string card = ranks[cardIndex % 13] + "(" + suits[cardIndex % 4] + ")";
+                board[i][j] = card;
+                cardIndex++;
             }
-            handSize--;
-        } else {
-            cout << "Invalid card index.\n";
         }
     }
 
-    void showHand() {
-        cout << name << "'s hand: ";
-        for (int i = 0; i < handSize; i++) {
-            cout << hand[i]->displayCard() << (i == handSize - 1 ? "" : ", ");
+    // Shuffle and store 52 cards from the grid into deck and remaining in stack
+    void shuffleDeck() {
+        vector<string> availableCards;
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                availableCards.push_back(board[i][j]);  // Add all cards from the board
+            }
+        }
+
+        random_device rd;
+        mt19937 g(rd());
+        shuffle(availableCards.begin(), availableCards.end(), g);  // Shuffle the cards
+
+        // Set deck with the first 52 cards
+        deck = vector<string>(availableCards.begin(), availableCards.begin() + 52);
+        // Set stack with the remaining cards
+        stack = vector<string>(availableCards.begin() + 52, availableCards.end());
+    }
+
+    // Function to assign cards to each player based on number of players
+    void dealCards() {
+        playerHands.resize(numPlayers);
+        int cardsPerPlayer = 7;  // Default cards for 2 players
+
+        // Adjust the number of cards each player gets based on the number of players
+        if (numPlayers == 2) {
+            cardsPerPlayer = 7;
+        } else if (numPlayers == 3) {
+            cardsPerPlayer = 6;
+        } else if (numPlayers == 4) {
+            cardsPerPlayer = 5;
+        } else if (numPlayers == 5 || numPlayers == 6) {
+            cardsPerPlayer = 4;
+        } else if (numPlayers >= 7 && numPlayers <= 10) {
+            cardsPerPlayer = 3;
+        } else if (numPlayers >= 11) {
+            cardsPerPlayer = 2;
+        }
+
+        // Deal the cards to each player
+        for (int i = 0; i < numPlayers; ++i) {
+            for (int j = 0; j < cardsPerPlayer; ++j) {
+                if (!deck.empty()) {
+                    playerHands[i].push_back(deck.back());
+                    deck.pop_back();  // Remove the card from the deck
+                }
+            }
+        }
+
+        // Store the remaining cards in the stack
+        stack = deck;
+
+        // Display the number of cards left in the stack
+        cout << "Cards left in stack: " << stack.size() << endl;
+    }
+
+    // Display the current board in the required format
+    void displayBoard() {
+        cout << "\nGame Board:\n";
+        for (int i = 0; i < 10; ++i) {
+            cout << "  +";
+            for (int j = 0; j < 10; ++j) {
+                cout << "--------";
+            }
+            cout << "+\n";
+            for (int j = 0; j < 10; ++j) {
+                cout << " | " << board[i][j];
+            }
+            cout << " |\n";
+        }
+        cout << "  +";
+        for (int i = 0; i < 10; ++i) {
+            cout << "--------";
+        }
+        cout << "+\n";
+    }
+
+    // Show the cards in the player's hand
+    void showPlayerHand(int player) {
+        cout << players[player] << "'s hand: ";
+        for (const auto &card : playerHands[player]) {
+            cout << card << " , ";
         }
         cout << endl;
     }
-};
 
-class Board {
-public:
-    string grid[10][10];
-    Card* wildSpace;
+    // Check if a player has won (by forming a sequence)
+    int checkForSequences() {
+        int sequences = 0;
+        // A sequence is 5 consecutive cards in a row (horizontal, vertical, or diagonal)
+        for (int i = 0; i < 10; ++i) {
+            for (int j = 0; j < 10; ++j) {
+                // Check horizontal
+                if (j + 4 < 10) {
+                    bool horizontal = true;
+                    for (int k = 0; k < 5; ++k) {
+                        if (board[i][j + k] != players[playerTurn]) {
+                            horizontal = false;
+                            break;
+                        }
+                    }
+                    if (horizontal) sequences++;
+                }
 
-    Board() {
-        // Initialize the wild space at lower-left corner
-        wildSpace = new Card("Wild", "X");
-        grid[9][0] = wildSpace->getCardRepresentation();  // Wild space at lower-left corner
+                // Check vertical
+                if (i + 4 < 10) {
+                    bool vertical = true;
+                    for (int k = 0; k < 5; ++k) {
+                        if (board[i + k][j] != players[playerTurn]) {
+                            vertical = false;
+                            break;
+                        }
+                    }
+                    if (vertical) sequences++;
+                }
 
-        // Fill the board with shuffled cards from the deck
-        fillBoardWithCards();
-    }
+                // Check diagonal (top-left to bottom-right)
+                if (i + 4 < 10 && j + 4 < 10) {
+                    bool diagonal = true;
+                    for (int k = 0; k < 5; ++k) {
+                        if (board[i + k][j + k] != players[playerTurn]) {
+                            diagonal = false;
+                            break;
+                        }
+                    }
+                    if (diagonal) sequences++;
+                }
 
-    void fillBoardWithCards() {
-        vector<Card*> deck;
-        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
-        string suits[] = {"H", "S", "C", "D"};
-        
-        // Fill the deck with cards
-        for (const string& suit : suits) {
-            for (const string& value : cardValues) {
-                deck.push_back(new Card(value, suit));
-            }
-        }
-
-        // Shuffle the deck
-        random_shuffle(deck.begin(), deck.end());
-
-        // Check if the deck is large enough (it should have 100 cards for a 10x10 grid)
-        while (deck.size() < 100) {
-            // Adding extra cards if deck size is less than 100
-            for (const string& suit : suits) {
-                for (const string& value : cardValues) {
-                    deck.push_back(new Card(value, suit));
+                // Check diagonal (bottom-left to top-right)
+                if (i - 4 >= 0 && j + 4 < 10) {
+                    bool diagonal = true;
+                    for (int k = 0; k < 5; ++k) {
+                        if (board[i - k][j + k] != players[playerTurn]) {
+                            diagonal = false;
+                            break;
+                        }
+                    }
+                    if (diagonal) sequences++;
                 }
             }
         }
-
-        // Place cards on the board, ensuring no "Empty" cards are placed
-        int index = 0;
-        for (int i = 0; i < 10; i++) {
-            for (int j = 0; j < 10; j++) {
-                if (index < deck.size()) {
-                    grid[i][j] = deck[index]->getCardRepresentation();
-                    index++;
-                }
-            }
-        }
+        return sequences;
     }
 
-    void displayBoard() {
-        cout << "\nGame Board (10x10 grid with cards):\n";
-        cout << "  +----------------------------------------------------------------------------------------------------------------------------------------------+\n";
+    // Function to handle a turn where the player plays a card
+    void playTurn() {
+        int row, col;
+        bool validMove = false;  // Flag to track if the move is valid
+        string chosenCard;
 
-        for (int i = 0; i < 10; i++) {
-            cout << "  |";
-            for (int j = 0; j < 10; j++) {
-                cout << setw(12) << grid[i][j] << " |";
-            }
-            cout << "\n  +------------------------------------------------------------------------------------------------------------------------------------------+\n";
-        }
-    }
+        // Loop to keep asking for a valid move until the player enters one
+        while (!validMove) {
+            showPlayerHand(playerTurn);
+            cout << players[playerTurn] << ", it's your turn. Enter row and column (0-9): ";
+            cin >> row >> col;
 
-    bool placeCard(int row, int col, Card* card, string playerName) {
-        if (row >= 0 && row < 10 && col >= 0 && col < 10) {
-            // Check if the spot is either "Empty", "Wild" or if it matches the player's card
-            if (grid[row][col] == "Empty" || grid[row][col] == wildSpace->getCardRepresentation() || 
-                grid[row][col].find(card->value) != string::npos) {
-                grid[row][col] = playerName + "'s " + card->getCardRepresentation();  // Display player's name with the card
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool checkSequence() {
-        // Check for 5 consecutive cards horizontally, vertically, or diagonally
-        return false;
-    }
-};
-
-class Game {
-private:
-    vector<Player*> players;
-    int playerCount;
-    int teamCount;
-    vector<vector<Player*>> teams;
-    Board board;
-    stack<Card*> deck;
-    int currentPlayerIndex;
-
-public:
-    Game() : currentPlayerIndex(0) {
-        initializeDeck();
-        teamCount = 0;
-        playerCount = 0;
-    }
-
-    void askPlayersAndTeams() {
-        // Ask for number of teams (2 or 3)
-        do {
-            cout << "Enter the number of teams (2 or 3): ";
-            cin >> teamCount;
-        } while (teamCount != 2 && teamCount != 3);
-
-        // Ask for number of players (between 2 and 12)
-        do {
-            cout << "Enter the number of players (between 2 and 12): ";
-            cin >> playerCount;
-        } while (playerCount < 2 || playerCount > 12);
-
-        // Create teams and players
-        teams.resize(teamCount);
-        string playerName;
-        for (int i = 0; i < playerCount; i++) {
-            cout << "Enter name for Player " << i + 1 << ": ";
-            cin >> playerName;
-            Player* newPlayer = new Player(playerName);
-            players.push_back(newPlayer);
-            teams[i % teamCount].push_back(newPlayer);  // Assign players to teams
-        }
-    }
-
-    void startGame() {
-        shuffleDeck();
-        dealCards();
-        play();
-    }
-
-private:
-    void initializeDeck() {
-        string cardValues[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
-        string suits[] = {"H", "S", "C", "D"};
-
-        for (const string &suit : suits) {
-            for (const string &value : cardValues) {
-                deck.push(new Card(value, suit));
-            }
-        }
-
-        deck.push(new Card("Joker", "X"));  // Add Jokers
-    }
-
-    void shuffleDeck() {
-        Card* tempDeck[52];
-        int index = 0;
-
-        while (!deck.empty()) {
-            tempDeck[index++] = deck.top();
-            deck.pop();
-        }
-
-        // Shuffle the cards
-        for (int i = 0; i < 52; i++) {
-            int randIndex = rand() % 52;
-            swap(tempDeck[i], tempDeck[randIndex]);
-        }
-
-        // Refill the deck
-        for (int i = 0; i < 52; i++) {
-            deck.push(tempDeck[i]);
-        }
-    }
-
-    void dealCards() {
-        for (int i = 0; i < playerCount; i++) {
-            for (int j = 0; j < 7; j++) {
-                players[i]->drawCard(deck.top());
-                deck.pop();
-            }
-        }
-    }
-
-    void play() {
-        while (true) {
-            board.displayBoard();
-            players[currentPlayerIndex]->showHand();
-
-            cout << players[currentPlayerIndex]->name << ", it's your turn.\n";
-            int cardIndex;
-            cout << "Enter the index of the card you want to play (0-6): ";
-            cin >> cardIndex;
-
-            // Validate the card index
-            if (cardIndex < 0 || cardIndex >= players[currentPlayerIndex]->handSize) {
-                cout << "Invalid card index. Try again.\n";
+            // Check if the row and column are within bounds
+            if (row < 0 || row >= 10 || col < 0 || col >= 10) {
+                cout << "Invalid position. Try again.\n";
                 continue;
             }
 
-            // Handle Jack card special conditions
-            Card* currentCard = players[currentPlayerIndex]->hand[cardIndex];
-            int row, col;
-            cout << "Enter the row and column (0-9) to place the card: ";
-            cin >> row >> col;
+            cout << "Enter the card you want to play (e.g., 2(H)): ";
+            cin >> chosenCard;
 
-            // Loop until the player makes a valid move
-            while (true) {
-                if (currentCard->value == "J") {
-                    if (currentCard->suit == "X") {  // Two-eyed Jack
-                        cout << "You have a Two-eyed Jack! Enter the row and column to place the card: ";
-                        if (board.placeCard(row, col, currentCard, players[currentPlayerIndex]->name)) {
-                            players[currentPlayerIndex]->playCard(cardIndex);
-                            break;
-                        } else {
-                            cout << "Invalid move. Try again.\n";
-                            cout << "Enter the row and column (0-9) to place the card: ";
-                            cin >> row >> col;
-                        }
-                    } else {  // One-eyed Jack
-                        cout << "You have a One-eyed Jack! Pick a card from the opponent team.\n";
-                        // Implement picking card from the opponent team (if necessary)
-                        break;
-                    }
-                } else {
-                    if (board.placeCard(row, col, currentCard, players[currentPlayerIndex]->name)) {
-                        players[currentPlayerIndex]->playCard(cardIndex);
-                        cout << players[currentPlayerIndex]->name << " played a card.\n";
-                        break;
-                    } else {
-                        cout << "Invalid move. Try again.\n";
-                        cout << "Enter the row and column (0-9) to place the card: ";
-                        cin >> row >> col;
-                    }
-                }
+            // Check if the card exists in player's hand
+            auto it = find(playerHands[playerTurn].begin(), playerHands[playerTurn].end(), chosenCard);
+            if (it == playerHands[playerTurn].end()) {
+                cout << "Invalid card. Try again.\n";
+                continue;
             }
-
-            // Check if any team has won
-            if (board.checkSequence()) {
-                cout << "Game Over! We have a winner!\n";
-                break;
-            }
-
-            // Switch to the next player
-            currentPlayerIndex = (currentPlayerIndex + 1) % playerCount;
-        }
-    }
-};
-
-int main() {
-    srand(time(0));
-
-    Game game;
-    game.askPlayersAndTeams();
-    game.startGame();
-
-    return 0;
-}
