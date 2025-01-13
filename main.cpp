@@ -206,3 +206,108 @@ private:
                 cout << "Invalid card. Try again.\n";
                 continue;
             }
+// Handle Jack cards
+            if (chosenCard == "J(S)" || chosenCard == "J(H)") {
+                // One-Eyed Jack: Remove an opponent's marker
+                if (board[row][col] == players[playerTurn] || board[row][col] == " " || board[row][col] == "X" || board[row][col] == "O") {
+                    cout << "Invalid position for One-Eyed Jack. Try again.\n";
+                    continue;
+                } else {
+                    board[row][col] = " ";  // Remove the marker
+                    validMove = true;
+                }
+            } else if (chosenCard == "J(C)" || chosenCard == "J(D)") {
+                // Two-Eyed Jack: Place marker on any open spot
+                if (board[row][col] != " " && board[row][col] != "X" && board[row][col] != "O") {
+                    cout << "Invalid position for Two-Eyed Jack. Try again.\n";
+                    continue;
+                } else {
+                    board[row][col] = players[playerTurn];  // Place the player's marker
+                    validMove = true;
+                }
+            } else {
+                // Regular card play
+                if (board[row][col] != chosenCard && board[row][col] != " ") {
+                    cout << "You must play the card that matches the one on the board at the chosen position. Try again.\n";
+                    continue;
+                } else {
+                    board[row][col] = players[playerTurn];  // Place the player's marker
+                    validMove = true;
+                }
+            }
+
+            // If we reach here, the move is valid
+            playerHands[playerTurn].erase(it);  // Remove the played card from hand
+        }
+
+        // Draw a card from stack if available (valid move only)
+        if (!stack.empty()) {
+            playerHands[playerTurn].push_back(stack.back());
+            stack.pop_back();
+            cout << "Cards left in stack: " << stack.size() << endl;  // Update remaining cards
+        }
+
+        // Display the updated board
+        displayBoard();
+
+        // Check for a winner
+        int sequences = checkForSequences();
+        teamSequences[playerTurn % teams.size()] += sequences;
+        if (teamSequences[playerTurn % teams.size()] >= 2) {
+            cout << teams[playerTurn % teams.size()] << " has won the game by completing 2 sequences!\n";
+            exit(0);  // End the game
+        }
+
+        // Move to the next player's turn
+        playerTurn = (playerTurn + 1) % numPlayers;
+    }
+
+public:
+    // Constructor to start the game
+    SequenceGame(int playersCount) : numPlayers(playersCount), playerTurn(0) {
+        cout << "Enter number of teams (2 or 3): ";
+        int numTeams;
+        cin >> numTeams;
+
+        for (int i = 0; i < numTeams; ++i) {
+            cout << "Enter name for Team " << i + 1 << ": ";
+            string teamName;
+            cin >> teamName;
+            teams.push_back(teamName);
+            teamSequences.push_back(0);
+        }
+
+        for (int i = 0; i < numPlayers; ++i) {
+            cout << "Enter name for Player " << i + 1 << " (Team " << (i % numTeams) + 1 << "): ";
+            string name;
+            cin >> name;
+            players.push_back(name);
+        }
+
+        initializeBoard();
+        shuffleDeck();
+        dealCards();
+    }
+
+    // Start the game
+    void startGame() {
+        while (!stack.empty()) {
+            displayBoard(); // Display the board before each turn
+            playTurn();
+        }
+        cout << "The game is a draw.\n";
+    }
+};
+
+int main() {
+    int numPlayers;
+    cout << "Enter the number of players (2 to 12): ";
+    cin >> numPlayers;
+    if (numPlayers < 2 || numPlayers > 12) {
+        cout << "Invalid number of players. The game supports 2 to 12 players only.\n";
+        return 0;
+    }
+    SequenceGame game(numPlayers);
+    game.startGame();
+    return 0;
+}
